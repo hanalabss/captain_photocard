@@ -25,16 +25,24 @@ class VirtualKeyboard(QWidget):
         'N': 'ㅜ', 'M': 'ㅡ'
     }
 
+    
+    # 문자 제한 설정
+    MAX_LOWERCASE = 6
+    MAX_UPPERCASE = 5
+    MAX_HANGUL = 4
+
     def __init__(self, input_widget, second_screen=None):
         super().__init__()
         self.input_widget = input_widget
         self.second_screen = second_screen  # SecondScreen 인스턴스 저장
 
-        self.is_hangul = False
+        self.is_hangul = True
         self.is_uppercase = False
         self.hangul_composer = HangulComposer()
         self.initUI()
         self.update_keyboard_labels()
+
+        self.bumper = False
 
     def initUI(self):
         self.layout = QVBoxLayout()
@@ -75,12 +83,12 @@ class VirtualKeyboard(QWidget):
         special_layout.setSpacing(5)
 
         # 각 버튼 설정
-        hangul_btn = QPushButton('한/영')
-        hangul_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        hangul_btn.setFont(QFont('맑은 고딕', 20))
-        hangul_btn.clicked.connect(self.toggle_hangul)
-        hangul_btn.setStyleSheet(self.get_special_button_style('#4299E1'))
-        hangul_btn.setFixedWidth(80)  # 고정 너비 설정
+        # hangul_btn = QPushButton('한/영')
+        # hangul_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # hangul_btn.setFont(QFont('맑은 고딕', 20))
+        # hangul_btn.clicked.connect(self.toggle_hangul)
+        # hangul_btn.setStyleSheet(self.get_special_button_style('#4299E1'))
+        # hangul_btn.setFixedWidth(80)  # 고정 너비 설정
 
         shift_btn = QPushButton('Shift')
         shift_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -109,44 +117,89 @@ class VirtualKeyboard(QWidget):
         print_btn.setFixedWidth(80)
         
         # 레이아웃에 버튼 추가
-        special_layout.addWidget(hangul_btn, 0, 0)
-        special_layout.addWidget(shift_btn, 0, 1)
-        special_layout.addWidget(space_btn, 0, 2)
-        special_layout.addWidget(backspace_btn, 0, 3)
-        special_layout.addWidget(print_btn, 0, 4)
+        # special_layout.addWidget(hangul_btn, 0, 0)
+        special_layout.addWidget(shift_btn, 0, 0)
+        special_layout.addWidget(space_btn, 0, 1)
+        special_layout.addWidget(backspace_btn, 0, 2)
+        special_layout.addWidget(print_btn, 0, 3)
         
         # 열 비율 설정 (총 10을 기준으로)
-        special_layout.setColumnStretch(0, 2)  # 한/영 버튼
-        special_layout.setColumnStretch(1, 2)  # Shift 버튼
-        special_layout.setColumnStretch(2, 4)  # Space 버튼
-        special_layout.setColumnStretch(3, 2)  # Backspace 버튼
-        special_layout.setColumnStretch(4, 2)  # 인쇄 버튼
+        # special_layout.setColumnStretch(0, 2)  # 한/영 버튼
+        special_layout.setColumnStretch(0, 2)  # Shift 버튼
+        special_layout.setColumnStretch(1, 4)  # Space 버튼
+        special_layout.setColumnStretch(2, 1)  # Backspace 버튼
+        special_layout.setColumnStretch(3, 3)  # 인쇄 버튼
 
         self.layout.addLayout(special_layout)
         self.setLayout(self.layout)
 
     def button_clicked(self, key):
+        # print(f"[VirtualKeyboard] bumper: {self.bumper}")
+        if self.bumper and self.is_hangul and key in self.hangul_map:
+            current_text = self.input_widget.text() + " "
+        else:
+            current_text = self.input_widget.text()
+        
         if self.is_hangul and key in self.hangul_map:
-            # Shift 상태에 따라 적절한 자모 선택
+            # 현재 텍스트 길이 체크 (완성된 글자 기준)
+            completed_chars = len([c for c in current_text if 0xAC00 <= ord(c) <= 0xD7A3])
+
+            # 연속된 자음/모음 입력 체크
+            consecutive_jamo = len([c for c in current_text if 0x3131 <= ord(c) <= 0x3163])
+            if consecutive_jamo >= self.MAX_HANGUL:
+                print(f"[VirtualKeyboard] Max consecutive jamo reached")
+                return
+            
+            # 4글자 초과 시 입력 차단
+            if completed_chars >= self.MAX_HANGUL and not (
+                len(current_text) > 0 and 
+                current_text[-1] == self.hangul_composer.current_text and 
+                self.hangul_composer.cho and 
+                self.hangul_composer.jung and 
+                not self.hangul_composer.jong
+            ):
+                print(f"[VirtualKeyboard] Max length reached: {completed_chars} characters")
+                return
+        
+                
             jamo = self.shift_hangul_map[key] if self.is_uppercase else self.hangul_map[key]
             committed, current = self.hangul_composer.add_jamo(jamo)
             
-            text = self.input_widget.text()
-            if text:
-                text = text[:-1] if len(text) > 0 else ""
+            if current_text:
+                if self.hangul_composer.current_text:
+                    new_text = current_text[:-1]
+                else:
+                    new_text = current_text
+            else:
+                new_text = ""
             
             if committed:
-                text += committed
-            
+                new_text += committed
             if current:
-                text += current
-            
-            self.input_widget.setText(text)
-            self.input_widget.setCursorPosition(len(text))
-        else:
-            self.input_widget.setText(self.input_widget.text() + 
-                        (key.upper() if self.is_uppercase else key.lower()))
+                new_text += current
 
+            if len(new_text) < 5:    
+                self.input_widget.setText(new_text)
+                self.input_widget.setCursorPosition(len(new_text))
+                self.bumper = False
+            else:
+                self.hangul_composer.reset()
+                self.bumper = True
+            
+        else:
+            if not self.check_length_limit(current_text):
+                return
+            if len(current_text.encode('utf-8')) > 9:
+                return
+            char = key.upper() if self.is_uppercase else key.lower()
+            self.input_widget.setText(current_text + char)
+            self.hangul_composer.reset()
+            self.bumper = True
+
+        
+        
+        
+            
     def insert_text(self, char):
         if char:
             self.input_widget.setText(self.input_widget.text() + char)
@@ -162,17 +215,65 @@ class VirtualKeyboard(QWidget):
         self.update_keyboard_labels()
 
     def space_pressed(self):
-        composed = self.hangul_composer.commit()
-        if composed:
-            self.insert_text(composed)
+        if self.is_hangul:
+            self.hangul_composer.reset()  # 현재 조합 상태만 초기화
         self.insert_text(' ')
+        
+    def check_length_limit(self, current_text):
+        """
+        문자 수 제한을 확인하는 메서드
+        """
+        current_length = len(current_text)
+        
+        if self.is_hangul:
+            # 항상 종성까지 입력 가능하도록 함
+            return current_length < self.MAX_HANGUL
+        elif self.is_uppercase:
+            return current_length < self.MAX_UPPERCASE
+        else:
+            return current_length < self.MAX_LOWERCASE
+
 
     def backspace(self):
         text = self.input_widget.text()
-        if text:
+        if not text:
+            return
+
+        last_char = text[-1]
+        is_hangul = 0xAC00 <= ord(last_char) <= 0xD7A3
+
+        try:
+            if self.hangul_composer.current_text:
+                current, changed = self.hangul_composer.backspace()
+                if changed:
+                    if len(text) > 0:
+                        text = text[:-1]
+                    if current:
+                        text += current
+                # print(f"[VirtualKeyboard] current: {current}")
+                if len(current) == 0:
+                    self.bumper = True
+            elif is_hangul:
+                char_code = ord(last_char) - 0xAC00
+                jong_idx = char_code % 28
+                if jong_idx > 0:
+                    jung_idx = ((char_code - jong_idx) // 28) % 21
+                    cho_idx = ((char_code - jong_idx) // 28) // 21
+                    new_code = 0xAC00 + (cho_idx * 21 + jung_idx) * 28
+                    text = text[:-1] + chr(new_code)
+                else:
+                    text = text[:-1]
+                self.hangul_composer.reset()
+            else:
+                text = text[:-1]
+
+        except AttributeError:
+            # CHOSUNG/JUNGSUNG 참조 에러 발생 시 단순히 문자 하나 삭제
+            text = text[:-1]
             self.hangul_composer.reset()
-            self.input_widget.setText(text[:-1])
-            self.input_widget.setCursorPosition(len(text) - 1)
+
+        self.input_widget.setText(text)
+        self.input_widget.setCursorPosition(len(text))
             
     def print_text(self):
         if hasattr(self, 'second_screen') and self.second_screen:
@@ -224,28 +325,3 @@ class VirtualKeyboard(QWidget):
     def darken_color(self, color):
         r, g, b = [int(color[i:i+2], 16) for i in (1, 3, 5)]
         return f'#{max(0, r-30):02X}{max(0, g-30):02X}{max(0, b-30):02X}'
-    
-
-
-# Example usage:
-if __name__ == "__main__":
-    from PyQt6.QtWidgets import QApplication
-    import sys
-    
-    app = QApplication(sys.argv)
-    input_widget = QLineEdit()
-    keyboard = VirtualKeyboard(input_widget)
-    
-    # Create main widget and layout
-    main_widget = QWidget()
-    main_layout = QVBoxLayout()
-    
-    # Add input widget and keyboard to layout
-    main_layout.addWidget(input_widget)
-    main_layout.addWidget(keyboard)
-    
-    # Set layout to main widget
-    main_widget.setLayout(main_layout)
-    main_widget.show()
-    
-    sys.exit(app.exec())

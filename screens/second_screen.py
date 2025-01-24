@@ -1,9 +1,10 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLineEdit,QLabel
-from PyQt6.QtCore import Qt,QPropertyAnimation
-from PyQt6.QtGui import QImage, QPainter, QGuiApplication, QPixmap
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton
+from PyQt6.QtCore import Qt, QPropertyAnimation
+from PyQt6.QtGui import QImage, QPainter, QGuiApplication
 from screens.virtual_keyboard import VirtualKeyboard
 import os
 import sys
+from wcwidth import wcwidth
 
 class SecondScreen(QWidget):
     def __init__(self, parent=None, admin_mode=False):
@@ -16,47 +17,70 @@ class SecondScreen(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.showFullScreen()
         self.initUI()
+        self.add_exit_button()
+
+    def add_exit_button(self, x_offset=50, y_offset=10):
+        self.exit_button = QPushButton("X", self)
+        self.exit_button.setStyleSheet("""
+            QPushButton {
+                background-color: red;
+                color: white;
+                font-size: 18px;
+                border: none;
+                border-radius: 10px;
+                padding: 5px;
+                width: 30px;
+                height: 30px;
+                z-index: 999;
+            }
+            QPushButton:hover {
+                background-color: darkred;
+            }
+        """)
+        self.exit_button.setFixedSize(40, 40)
         
+        screen = QGuiApplication.primaryScreen().geometry()
+        self.exit_button.move(screen.width() - x_offset, y_offset)
+        self.exit_button.raise_()
+        self.exit_button.clicked.connect(QGuiApplication.quit)
+        self.exit_button.setVisible(True)
+        
+    def showEvent(self, event):
+        super().showEvent(event)
+        if hasattr(self, 'exit_button'):
+            self.exit_button.raise_()
+            
     def eventFilter(self, source, event):
         if isinstance(source, VirtualKeyboard):
             if event.type() == event.Type.FocusOut:
-                # print("VirtualKeyboard lost focus via eventFilter, restoring...")
                 source.raise_()
                 source.activateWindow()
                 return True
         return super().eventFilter(source, event)
-
     
     def mousePressEvent(self, event):
         if hasattr(self, 'keyboard'):
-            # 클릭된 위치 가져오기
             click_pos = event.pos()
-            
-            # 키보드의 geometry 가져오기
             keyboard_rect = self.keyboard.geometry()
+            input_field_rect = self.input_field.geometry()
+            exit_button_rect = self.exit_button.geometry()
             
-            # 디버깅을 위한 좌표 출력
-            print(f"클릭 위치: ({click_pos.x()}, {click_pos.y()})")
-            print(f"키보드 영역: {keyboard_rect.left()}, {keyboard_rect.top()}, {keyboard_rect.width()}, {keyboard_rect.height()}")
-            print(f"키보드 활성화 상태: {self.keyboard.isActiveWindow()}")
-            
-            # 클릭된 위치가 키보드 영역 안인지 확인
             if keyboard_rect.contains(click_pos):
-                print("키보드 영역 내부 클릭")
-                # 키보드 영역 내부 클릭인 경우 이벤트 처리
-                if not self.keyboard.isActiveWindow():
-                    self.keyboard.raise_()
-                    self.keyboard.activateWindow()
+                self.keyboard.raise_()
+                self.keyboard.activateWindow()
+                event.accept()
+            elif input_field_rect.contains(click_pos):
+                self.input_field.setFocus()
+                self.keyboard.raise_()
+                self.keyboard.activateWindow()
+                event.accept()
+            elif exit_button_rect.contains(click_pos):
+                event.accept()
             else:
-                print("키보드 영역 외부 클릭")
-                # 키보드 영역 외부 클릭인 경우 이벤트 무시
-                event.ignore()
-                
-            # 키보드를 항상 최상단에 유지
-            self.keyboard.raise_()
-            self.keyboard.activateWindow()
-    
-        if self.click_count < 2:
+                event.accept()
+                return
+        
+        if self.admin_mode and self.click_count < 2:
             x = event.position().x()
             y = event.position().y()
             self.coordinates.append((x, y))
@@ -66,30 +90,27 @@ class SecondScreen(QWidget):
                 x1, y1 = self.coordinates[0]
                 x2, y2 = self.coordinates[1]
                 
-                # 바탕화면 경로 가져오기
-                desktop_path = os.path.join(os.path.expanduser('~'), 'Desktop')
-                file_path = os.path.join(desktop_path, 'keyboard_coordinates.txt')
+                # desktop_path = os.path.join(os.path.expanduser('~'), 'Desktop')
+                # file_path = os.path.join(desktop_path, 'keyboard_coordinates.txt')
                 
-                # 좌표 정보를 파일로 저장
-                try:
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(f"키보드 영역 좌표:\n")
-                        f.write(f"좌상단: ({x1}, {y1})\n")
-                        f.write(f"우하단: ({x2}, {y2})\n")
-                        f.write(f"너비: {x2 - x1}\n")
-                        f.write(f"높이: {y2 - y1}\n")
-                        f.write(f"\n화면 크기: {self.screen_width} x {self.screen_height}")
-                except Exception as e:
-                    # 파일 저장 실패시 임시 경로에 저장 시도
-                    temp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'keyboard_coordinates.txt')
-                    with open(temp_path, 'w', encoding='utf-8') as f:
-                        f.write(f"키보드 영역 좌표:\n")
-                        f.write(f"좌상단: ({x1}, {y1})\n")
-                        f.write(f"우하단: ({x2}, {y2})\n")
-                        f.write(f"너비: {x2 - x1}\n")
-                        f.write(f"높이: {y2 - y1}\n")
-                        f.write(f"\n화면 크기: {self.screen_width} x {self.screen_height}")
-        
+                # try:
+                #     with open(file_path, 'w', encoding='utf-8') as f:
+                #         f.write(f"키보드 영역 좌표:\n")
+                #         f.write(f"좌상단: ({x1}, {y1})\n")
+                #         f.write(f"우하단: ({x2}, {y2})\n")
+                #         f.write(f"너비: {x2 - x1}\n")
+                #         f.write(f"높이: {y2 - y1}\n")
+                #         f.write(f"\n화면 크기: {self.screen_width} x {self.screen_height}")
+                # except Exception as e:
+                #     temp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'keyboard_coordinates.txt')
+                #     with open(temp_path, 'w', encoding='utf-8') as f:
+                #         f.write(f"키보드 영역 좌표:\n")
+                #         f.write(f"좌상단: ({x1}, {y1})\n")
+                #         f.write(f"우하단: ({x2}, {y2})\n")
+                #         f.write(f"너비: {x2 - x1}\n")
+                #         f.write(f"높이: {y2 - y1}\n")
+                #         f.write(f"\n화면 크기: {self.screen_width} x {self.screen_height}")
+    
     def initUI(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -102,7 +123,6 @@ class SecondScreen(QWidget):
         
         self.load_background()
         
-        # 입력 필드 생성
         self.input_field = QLineEdit(self)
         self.input_field.setGeometry(118, 925, 839, 131)
         self.input_field.setStyleSheet("""
@@ -116,7 +136,6 @@ class SecondScreen(QWidget):
             }
         """)
         
-        # 가상 키보드 설정
         KEYBOARD_COORDS = {
             'left': 106.0,
             'top': 1141.0,
@@ -142,24 +161,17 @@ class SecondScreen(QWidget):
         )
         
         self.keyboard.show()
-
         self.ensure_widget_visibility()
         
-        
     def ensure_widget_visibility(self):
-        """모든 위젯이 보이도록 설정"""
-        # self.live_label.setVisible(True)
         self.input_field.setVisible(True)
-        
     
     def paintEvent(self, event):
         if self.background:
             painter = QPainter(self)
             painter.drawImage(0, 0, self.background)
         
-        # 모든 위젯을 최상위로 올림
         self.input_field.raise_()
-        # self.live_label.raise_()
         if hasattr(self, 'keyboard'):
             self.keyboard.raise_()
             
@@ -172,7 +184,7 @@ class SecondScreen(QWidget):
             else:
                 application_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             
-            image_path = os.path.join(application_path, "assets", "input_screen_steps.jpg")
+            image_path = os.path.join("assets", "input_screen_steps.jpg")
             self.background = QImage(image_path)
             
             if self.background.isNull():
@@ -186,52 +198,62 @@ class SecondScreen(QWidget):
             )
             
         except Exception as e:
-            print(f"Error loading background image: {e}")
             self.background = None
               
     def focusOutEvent(self, event):
-        print("VirtualKeyboard lost focus, restoring...")
-        self.raise_()  # 다시 최상위로 올리기
-        self.activateWindow()  # 포커스를 다시 잡기
-        event.accept()  # 이벤트를 처리했음을 알림
+        self.raise_()
+        self.activateWindow()
+        event.accept()
         super().focusOutEvent(event)
 
     def hide_with_animation(self, widgets):
         for widget in widgets:
             animation = QPropertyAnimation(widget, b"windowOpacity")
-            animation.setDuration(300)  # 300ms 애니메이션
-            animation.setStartValue(1.0)  # 시작 투명도
-            animation.setEndValue(0.0)  # 끝 투명도
+            animation.setDuration(300)
+            animation.setStartValue(1.0)
+            animation.setEndValue(0.0)
             animation.start()
-            animation.finished.connect(widget.hide)  # 애니메이션 후 hide 호출
-            
+            animation.finished.connect(widget.hide)
 
     def print_input(self):
-        """가상 키보드에서 입력된 텍스트를 프린트"""
         from .print_manager import PrintManager
         from .process_screen import ProcessScreen
+        from .config_handler import load_print_coordinates
 
         text = self.input_field.text()
         if text:
-            # 입력 필드 및 키보드 제거
-            self.input_field.deleteLater()  # 입력 필드를 삭제
-            self.keyboard.deleteLater()  # 가상 키보드를 삭제
+            text = self.visual_center(text.strip(), 8, ' ')
+            self.input_field.deleteLater()
+            self.keyboard.deleteLater()
             
-            # 프린트 작업 실행
+            x, y = load_print_coordinates()
             printer = PrintManager()
-            printer.direct_print(text, x=102, y=155)  # 좌표값 수정 필요
+            printer.direct_print(text, x=x, y=y)
             
-            # 프로세스 화면으로 전환
             self.parent().setCentralWidget(ProcessScreen(self.parent()))
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
-            # print("ESC Key Pressed: Closing application from SecondScreen")  # 디버그 출력
-            QGuiApplication.quit()  # 애플리케이션 종료
+            QGuiApplication.quit()
         else:
-            super().keyPressEvent(event)  # 기본 동작 처리
+            super().keyPressEvent(event)
             
     def closeEvent(self, event):
-        # print("SecondScreen closed: Exiting application")
-        QGuiApplication.quit()  # 애플리케이션 종료
+        QGuiApplication.quit()
         super().closeEvent(event)
+
+    def visual_center(self, text, width, fillchar=' '):
+        # 문자열의 시각적 너비 계산
+        text_width = sum(wcwidth(char) for char in text)  # 각 문자별로 너비 계산
+        
+        # 필요한 패딩 계산
+        padding = width - text_width
+        if padding <= 0:
+            return text
+        
+        # 왼쪽과 오른쪽 패딩 계산
+        left_padding = padding // 2
+        right_padding = padding - left_padding
+        
+        # 중앙 정렬된 문자열 반환
+        return (fillchar * left_padding) + text + (fillchar * right_padding)

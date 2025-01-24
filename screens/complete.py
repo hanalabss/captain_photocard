@@ -14,7 +14,7 @@ class CompleteScreen(QWidget):
         self.initUI()
 
     def initUI(self):
-        print("Initializing CompleteScreen UI")
+        # print("Initializing CompleteScreen UI")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -26,8 +26,8 @@ class CompleteScreen(QWidget):
         else:
             application_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        complete_image_path = os.path.join(application_path, "assets", "printing_complete.jpg")
-        print(f"Complete image path: {complete_image_path}")
+        complete_image_path = os.path.join("assets", "printing_complete.jpg")
+        # print(f"Complete image path: {complete_image_path}")
         
         complete_image = QImage(complete_image_path)
         

@@ -24,7 +24,7 @@ class ProcessScreen(QWidget):
         else:
             application_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        process_image_path = os.path.join(application_path, "assets", "printing_process.jpg")
+        process_image_path = os.path.join( "assets", "printing_process.jpg")
         process_image = QImage(process_image_path)
         
         if not process_image.isNull():
@@ -38,8 +38,8 @@ class ProcessScreen(QWidget):
             label.setPixmap(QPixmap.fromImage(process_image))
             layout.addWidget(label)
 
-        # 10초 후 완료 화면으로 이동
-        QTimer.singleShot(1000, self.go_to_complete_screen)
+        # 3초 후 완료 화면으로 이동
+        QTimer.singleShot(3000, self.go_to_complete_screen)
 
     def go_to_complete_screen(self):
         """완료 화면으로 이동"""

@@ -7,10 +7,12 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('assets', 'assets'),  # 전체 assets 폴더를 복사
-        ('screens', 'screens')
+        ('screens', 'screens'),  # screens 폴더만 유지
+        ('config.txt', '.'),  # config.txt를 루트 디렉토리에 추가
+
     ],
     hiddenimports=[
+        'wcwidth',
         'screens.second_screen',
         'screens.virtual_keyboard',
         'screens.hangul_composer',
@@ -47,7 +49,13 @@ a = Analysis(
         'Qt.WidgetAttribute',
         'Qt.WindowType',
         'Qt.KeyboardModifier',
-        'Qt.Event'
+        'Qt.Event',
+        'pygame',
+        'pygame.mixer',
+        'pygame.mixer_music',
+        'PyQt6.QtCore.Qt.Orientation',
+        'PyQt6.QtWidgets.QHBoxLayout',
+        'PyQt6.QtWidgets.QSlider'
     ],
     hookspath=[],
     hooksconfig={},
@@ -64,13 +72,13 @@ exe = EXE(
     a.datas,
     [],
     name='main',
-    debug=True,  # debug를 True로 유지
+    debug=True,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,  # console을 True로 유지해서 로그 확인
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

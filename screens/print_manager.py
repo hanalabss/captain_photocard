@@ -19,12 +19,14 @@ class PrintManager:
             else:
                 self.application_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 print(f"개발 모드 경로: {self.application_path}")
-                
-            self.font_path = os.path.join(self.application_path, "assets", "fonts", "A시월구일1.TTF")
-            self.image_path = os.path.join(self.application_path, "assets", "input_image.jpg")
             
+            # Initialize font attributes
+            self.font_id = -1
+            self.font_family = "Arial"  # Default font family
+                
+            self.font_path = os.path.join("assets", "fonts", "A시월구일1.TTF")            
             print(f"폰트 경로: {self.font_path}")
-            print(f"이미지 경로: {self.image_path}")
+            # print(f"이미지 경로: {self.image_path}")
             
             # 폰트 존재 확인
             if os.path.exists(self.font_path):
@@ -32,11 +34,6 @@ class PrintManager:
             else:
                 print("폰트 파일이 없음!")
             
-            # 이미지 존재 확인
-            if os.path.exists(self.image_path):
-                print("이미지 파일 존재함")
-            else:
-                print("이미지 파일이 없음!")
             
             # 폰트 등록
             self.font_id = QFontDatabase.addApplicationFont(self.font_path)
@@ -57,32 +54,16 @@ class PrintManager:
             painter = QPainter()
             if painter.begin(self.printer):
                 try:
-                    # 배경 이미지 로드
-                    print("배경 이미지 로드 시도")
-                    background = QImage(self.image_path)
-                    if not background.isNull():
-                        print("배경 이미지 로드 성공")
-                        target_rect = QRectF(0, 0, self.printer.width(), self.printer.height())
-                        painter.drawImage(target_rect, background)
-                    else:
-                        print("배경 이미지 로드 실패!")
-                    
-                    # 폰트 설정
-                    font = QFont()
-                    if self.font_id != -1:
-                        font.setFamily(self.font_family)
-                        print(f"설정된 폰트: {self.font_family}")
-                    else:
-                        font.setFamily("Arial")
-                        print("기본 폰트(Arial) 사용")
-                    
+                    # Set up font
+                    font = QFont(self.font_family)
                     font.setPointSizeF(9.6)
                     painter.setFont(font)
+                    # print(f"설정된 폰트: {self.font_family}")
                     
-                    # 텍스트 색상 설정
-                    painter.setPen(QColor(255, 0, 0))
+                    # Set text color
+                    painter.setPen(QColor(0, 0, 0))
                     
-                    # 텍스트 그리기
+                    # Draw text
                     print(f"텍스트 그리기: {text}")
                     painter.drawText(x, y, text)
                     print("텍스트 그리기 완료")
@@ -97,9 +78,11 @@ class PrintManager:
             print(f"프린트 중 오류 발생: {str(e)}")
             print("상세 오류:")
             print(traceback.format_exc())
+    
                 
     def direct_print(self, text, x, y):
-        print(f"다이렉트 프린트 시작: text='{text}'")
+        print(f"다이렉트 프린트 시작: text='{text}', x={x}, y={y}")  # 기존 로그
+        print(f"프린트 좌표: x={x}, y={y}")  # 새로운 좌표 로그
         try:
             self.print_text(text, x, y)
         except Exception as e:

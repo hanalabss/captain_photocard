@@ -30,6 +30,20 @@ class HangulComposer:
         ('ㄹ', 'ㅎ'): 'ㅀ',
         ('ㅂ', 'ㅅ'): 'ㅄ'
     }
+    
+    # 복합 모음 매핑 추가
+    COMPLEX_VOWEL_MAP = {
+        ('ㅗ', 'ㅏ'): 'ㅘ',
+        ('ㅗ', 'ㅐ'): 'ㅙ',
+        ('ㅗ', 'ㅣ'): 'ㅚ',
+        ('ㅜ', 'ㅓ'): 'ㅝ',
+        ('ㅜ', 'ㅔ'): 'ㅞ',
+        ('ㅜ', 'ㅣ'): 'ㅟ',
+        ('ㅡ', 'ㅣ'): 'ㅢ'
+    }
+    
+    # 겹받침을 분해하기 위한 역매핑
+    REVERSE_COMPLEX_JONGSUNG = {v: k for k, v in COMPLEX_JONGSUNG_MAP.items()}
 
     def __init__(self):
         self.reset()
@@ -45,70 +59,114 @@ class HangulComposer:
         self.last_jamo = None
         self.temp_jong = None
 
-    def try_double_consonant(self, jamo):
-        if (self.last_jamo in self.DOUBLE_CONSONANT_MAP and 
-            self.last_jamo == jamo):
-            return self.DOUBLE_CONSONANT_MAP[jamo]
-        return jamo
-
     def try_complex_jongsung(self, current_jong, new_jong):
         if (current_jong, new_jong) in self.COMPLEX_JONGSUNG_MAP:
             return self.COMPLEX_JONGSUNG_MAP[(current_jong, new_jong)]
         return new_jong
 
+    def backspace(self):
+        """
+        초성, 중성, 종성 순으로 하나씩 삭제
+        반환값: (삭제된 후의 현재 조합중인 글자, 변경 여부)
+        """
+        changed = False
+        
+        # 현재 조합 중인 글자가 완성된 한글인 경우
+        if self.cho and self.jung:
+            # 종성이 있으면 먼저 제거
+            if self.jong is not None:
+                if self.jong in self.REVERSE_COMPLEX_JONGSUNG:
+                    cons1, _ = self.REVERSE_COMPLEX_JONGSUNG[self.jong]
+                    self.jong = cons1
+                else:
+                    self.jong = None
+                changed = True
+            # 중성 제거
+            elif self.jung is not None:
+                self.jung = None
+                changed = True
+            # 초성 제거
+            elif self.cho is not None:
+                self.cho = None
+                changed = True
+        else:
+            # 조합 중이 아닌 경우 전체 초기화
+            self.reset()
+            changed = True
+            
+        current = self.combine()
+        if current:
+            self.current_text = current
+        else:
+            self.current_text = ""
+           
+        return self.current_text, changed
+
     def add_jamo(self, jamo):
+        # print(f"\n[HangulComposer] Adding jamo: {jamo}")
+        # print(f"[HangulComposer] Current state - cho: {self.cho}, jung: {self.jung}, jong: {self.jong}")
         result = None
         
-        # 쌍자음 처리
         if jamo in self.CHOSUNG:
-            jamo = self.try_double_consonant(jamo)
-        
-        # 모음이 입력된 경우
-        if jamo in self.JUNGSUNG:
+            # print(f"[HangulComposer] After double consonant check: {jamo}")
+            
+            if self.cho is None and self.jung is None:
+                self.cho = jamo
+            elif self.cho is not None and self.jung is not None:
+                if self.jong is None:
+                    if jamo in self.JONGSUNG:
+                        self.jong = jamo
+                    else:
+                        result = self.commit()
+                        self.cho = jamo
+                else:
+                    # 겹받침 시도
+                    complex_jong = self.try_complex_jongsung(self.jong, jamo)
+                    if complex_jong != jamo:  # 겹받침이 가능한 경우
+                        self.jong = complex_jong
+                    else:  # 겹받침이 불가능한 경우
+                        result = self.commit()  
+                        self.cho = jamo  # 새 글자 시작
+            else:
+                result = self.commit()
+                self.cho = jamo
+            
+        elif jamo in self.JUNGSUNG:
+            # 복합 모음 처리
+            if self.cho is not None and self.jung is not None and not self.jong:
+                if (self.jung, jamo) in self.COMPLEX_VOWEL_MAP:
+                    self.jung = self.COMPLEX_VOWEL_MAP[(self.jung, jamo)]
+                    current = self.combine()
+                    if current:
+                        self.current_text = current
+                    return result, self.current_text
+            
             if self.jong is not None:
-                if self.jong in [v for v in self.COMPLEX_JONGSUNG_MAP.values()]:
-                    for (j1, j2), complex_jong in self.COMPLEX_JONGSUNG_MAP.items():
-                        if complex_jong == self.jong:
-                            new_cho = j2
-                            self.jong = j1
-                            break
+                # 겹받침 처리
+                if self.jong in self.REVERSE_COMPLEX_JONGSUNG:
+                    cons1, cons2 = self.REVERSE_COMPLEX_JONGSUNG[self.jong]
+                    self.jong = cons1  # 첫 자음은 종성으로
+                    result = self.commit()  # 현재 글자 완성
+                    self.cho = cons2  # 두번째 자음은 다음 글자의 초성으로
                 else:
                     new_cho = self.jong
                     self.jong = None
-                
-                result = self.combine()
-                self.cho = new_cho
+                    result = self.commit()
+                    self.cho = new_cho
                 self.jung = jamo
             elif self.cho is not None and self.jung is None:
                 self.jung = jamo
             else:
                 result = self.commit()
                 self.jung = jamo
-                
-        # 자음이 입력된 경우
-        elif jamo in self.CHOSUNG:
-            if self.cho is None and self.jung is None:
-                self.cho = jamo
-            elif self.cho is not None and self.jung is not None:
-                if self.jong is None:
-                    self.jong = jamo
-                else:
-                    new_jong = self.try_complex_jongsung(self.jong, jamo)
-                    if new_jong != jamo:
-                        self.jong = new_jong
-                    else:
-                        result = self.commit()
-                        self.cho = jamo
-            else:
-                result = self.commit()
-                self.cho = jamo
-
-        self.last_jamo = jamo
         
+        self.last_jamo = jamo
         current = self.combine()
+        
         if current:
             self.current_text = current
             
+        # print(f"[HangulComposer] Result - committed: {result}, current: {self.current_text}")
         return result, self.current_text
 
     def combine(self):
